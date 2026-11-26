@@ -1,8 +1,12 @@
 /**
  * Minimal human-readable ABI for QorePayVault (kept in code so the agent
  * does not depend on Hardhat build artifacts at runtime).
+ * Parsed with viem's parseAbi — writeContract/readContract need the parsed
+ * form, not raw strings.
  */
-export const QORE_PAY_VAULT_ABI = [
+import { parseAbi } from "viem";
+
+export const QORE_PAY_VAULT_ABI = parseAbi([
   "constructor(address owner_) payable",
   "function owner() view returns (address)",
   "function nonce() view returns (uint256)",
@@ -28,4 +32,20 @@ export const QORE_PAY_VAULT_ABI = [
   "event SessionRevoked(address indexed agent)",
   "event PaymentExecuted(uint256 indexed planId, address indexed agent, address indexed payee, uint256 amount, uint256 paymentsLeft)",
   "event GuardianWithdrawn(address indexed to, uint256 amount, uint256 nonce)",
-] as const;
+  "error NotOwner()",
+  "error NotAgent()",
+  "error ZeroAddress()",
+  "error ZeroAmount()",
+  "error InvalidPlan()",
+  "error PlanNotActive()",
+  "error PaymentNotDue()",
+  "error SessionNotActive()",
+  "error SessionExpired()",
+  "error PerPaymentCapExceeded()",
+  "error DailyCapExceeded()",
+  "error InsufficientVaultBalance()",
+  "error GuardianKeyNotRegistered()",
+  "error GuardianKeyNotProven()",
+  "error BadPqcSignature()",
+  "error TransferFailed()",
+]);

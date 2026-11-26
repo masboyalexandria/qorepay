@@ -51,6 +51,7 @@ import {
   ensureWindow,
   fmtQor,
   onChain,
+  sendQor,
   uqorBalance,
   vaultAddress,
 } from "./qore.js";
@@ -86,6 +87,15 @@ const toUqor = (qor: string): bigint => {
 };
 
 const short = (addr: string) => `${addr.slice(0, 10)}...${addr.slice(-4)}`;
+
+/** Pull a custom-error name (BadPqcSignature, NotAgent, …) out of a viem revert message. */
+const errName = (e: unknown): string => {
+  const msg = (e as Error).message;
+  const m = msg.match(
+    /\b(BadPqcSignature|NotAgent|NotOwner|ZeroAddress|ZeroAmount|InvalidPlan|PlanNotActive|PaymentNotDue|SessionNotActive|SessionExpired|PerPaymentCapExceeded|DailyCapExceeded|InsufficientVaultBalance|GuardianKeyNotRegistered|GuardianKeyNotProven|TransferFailed)\b/,
+  );
+  return m ? m[1] : msg.split("\n")[0].slice(0, 160);
+};
 
 async function readPlans() {
   const v = vault();
@@ -141,17 +151,30 @@ const cmds: Record<string, (...args: string[]) => Promise<void>> = {
     console.log("agent ready: PQC key registered, EVM window live.");
   },
 
+  async send(to: string, qor: string, ...memoParts: string[]) {
+    if (!to || !qor) throw new Error("usage: pnpm agent send <qor1-address> <QOR> [memo]");
+    const ownerAcc = accountFromEnv("OWNER");
+    await ensureRegistered(ownerAcc);
+    const memo = memoParts.length > 0 ? memoParts.join(" ") : undefined;
+    const hash = await sendQor(ownerAcc, to, toUqor(qor), memo);
+    console.log(`sent ${qor} QOR to ${to}${memo ? ` (memo: ${memo})` : ""}: ${hash}`);
+    const c = await onChain(hash);
+    console.log(`on-chain: code ${c?.code}, hybrid ML-DSA-87: ${c?.hybrid ? "verified" : "unknown"}`);
+  },
+
   async deploy(...args: string[]) {
     const fundArg = args[args.indexOf("--fund") + 1] ?? "10";
     const ownerAcc = accountFromEnv("OWNER");
     console.log(`owner: ${ownerAcc.evm} (${ownerAcc.cosmos})`);
     await ensureRegistered(ownerAcc);
-    await ensureWindow(ownerAcc);
+    // The window budget must cover the funding value + fees of the deploy
+    // and the plan txs that follow (default windows only hold ~3.75 QOR).
+    const fund = parseEther(fundArg);
+    await ensureWindow(ownerAcc, 600n, 5n, toUqor(fundArg) + 5_000_000n);
     const artifact = JSON.parse(
       readFileSync("artifacts/contracts/QorePayVault.sol/QorePayVault.json", "utf8"),
     ) as { abi: unknown; bytecode: `0x${string}` };
     const ownerWallet = walletFor("OWNER");
-    const fund = parseEther(fundArg);
     console.log(`deploying QorePayVault (funding ${fundArg} QOR)...`);
     const hash = await ownerWallet.deployContract({
       abi: artifact.abi as never,
@@ -244,8 +267,7 @@ const cmds: Record<string, (...args: string[]) => Promise<void>> = {
           const receipt = await publicClient.waitForTransactionReceipt({ hash });
           console.log(`  ${label}  PAID (${receipt.transactionHash.slice(0, 18)}...)`);
         } catch (e) {
-          const msg = (e as Error).message.split("\n")[0];
-          console.log(`  ${label}  REFUSED BY THE CHAIN: ${msg.slice(0, 160)}`);
+          console.log(`  ${label}  REFUSED BY THE CHAIN: ${errName(e)}`);
         }
       }
     };
@@ -352,8 +374,7 @@ const cmds: Record<string, (...args: string[]) => Promise<void>> = {
       });
       console.log(`  UNEXPECTED: withdrawal accepted?! ${hash}`);
     } catch (e) {
-      const msg = (e as Error).message;
-      console.log(`  BLOCKED: ${msg.includes("BadPqcSignature") ? "BadPqcSignature" : msg.split("\n")[0].slice(0, 160)}`);
+      console.log(`  BLOCKED: ${errName(e)}`);
     }
     console.log("\n[2] Stranger tries to pay a plan (not the plan's agent)");
     const plans = await readPlans();
@@ -368,8 +389,7 @@ const cmds: Record<string, (...args: string[]) => Promise<void>> = {
         });
         console.log(`  UNEXPECTED: stranger payment accepted?! ${hash}`);
       } catch (e) {
-        const msg = (e as Error).message;
-        console.log(`  BLOCKED: ${msg.includes("NotAgent") ? "NotAgent" : msg.split("\n")[0].slice(0, 160)}`);
+        console.log(`  BLOCKED: ${errName(e)}`);
       }
     } else {
       console.log("  (skipped: no plans yet)");
@@ -389,8 +409,14 @@ const cmds: Record<string, (...args: string[]) => Promise<void>> = {
     });
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     console.log(`  SIGNED + EXECUTED by relayer: ${receipt.transactionHash}`);
-    const c = await onChain(receipt.transactionHash);
-    console.log(`  on-chain: code ${c?.code}, hybrid ML-DSA-87: ${c?.hybrid ? "verified" : "unknown"}`);
+    // The EVM tx hash is not a Cosmos tx hash, so the REST hybrid check does
+    // not apply here; the proof is on chain in the vault itself: the nonce
+    // advanced and the balance dropped by exactly 0.01 QOR.
+    const nonceAfter = await publicClient.readContract({ ...v, functionName: "nonce" });
+    const balanceAfter = await publicClient.getBalance({ address: v.address });
+    console.log(
+      `  verified on chain: guardian nonce ${nonce} -> ${nonceAfter}, vault balance ${formatEther(balance)} -> ${formatEther(balanceAfter)} QOR`,
+    );
   },
 
   async dashboard() {
@@ -405,7 +431,7 @@ if (!cmds[cmd]) {
     [
       "QorePay agent — recurring bill payments with on-chain limits (testnet only)",
       "",
-      "  pnpm agent init | setup | deploy [--fund QOR] | deposit <QOR>",
+      "  pnpm agent init | setup | send <qor1-address> <QOR> | deploy [--fund QOR] | deposit <QOR>",
       "  pnpm agent plan <payee> <QOR> <intervalSec> <payments>",
       "  pnpm agent run [--once | --watch <sec>] | status",
       "  pnpm agent revoke <agentAddress> | cancel <planId>",

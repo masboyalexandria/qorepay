@@ -67,6 +67,7 @@ async function broadcast(
   acc: UnifiedAccount,
   mode: "hybrid" | "classical",
   messages: Parameters<EthNativeSigner["sign"]>[0]["messages"],
+  memo?: string,
 ): Promise<string> {
   const { accountNumber, sequence } = await accountSequence(acc.cosmos);
   const signer = new EthNativeSigner(acc, { signMode: mode, rest: TESTNET.rest });
@@ -77,6 +78,7 @@ async function broadcast(
       accountNumber,
       sequence,
       fee: FEE,
+      memo,
       messages,
     });
     return res.transactionHash;
@@ -96,19 +98,42 @@ export async function ensureRegistered(acc: UnifiedAccount): Promise<boolean> {
   return true;
 }
 
-/** Open an EVM authorisation window when none is live. Returns true when a window was opened. */
-export async function ensureWindow(acc: UnifiedAccount, blocks = 600n, maxTxs = 5n): Promise<boolean> {
+/** Open an EVM authorisation window when none is live. Returns true when a window was opened.
+ *  The window budget covers value + max fee of every tx inside it. Pass
+ *  maxValueUqor when a tx carries value (e.g. funding a vault on deploy);
+ *  otherwise it is sized for maxTxs plain txs of up to 3,000,000 gas at a
+ *  250 gwei fee cap. */
+export async function ensureWindow(
+  acc: UnifiedAccount,
+  blocks = 600n,
+  maxTxs = 5n,
+  maxValueUqor?: bigint,
+): Promise<boolean> {
   const w = await evmWindowStatus({ rest: TESTNET.rest, address: acc.cosmos });
   if (w.found && w.live && w.remainingTxs > 0n && w.remainingBlocks > 0n) {
-    console.log(`  window live: ${w.remainingBlocks} blocks, ${w.remainingTxs} txs left`);
-    return false;
+    const need = maxValueUqor ?? 0n;
+    if (need === 0n || w.remainingValue >= need) {
+      console.log(`  window live: ${w.remainingBlocks} blocks, ${w.remainingTxs} txs left`);
+      return false;
+    }
+    console.log(`  window live but budget too small (${w.remainingValue} uqor left, need ${need}) — opening a bigger one`);
   }
   const perTx = evmWindowCost({ gas: 3_000_000n, maxFeePerGas: 250_000_000_000n });
-  const maxValue = perTx * maxTxs;
+  const maxValue = maxValueUqor ?? perTx * maxTxs;
   const msg = openEvmWindowMsg({ sender: acc.cosmos, blocks, maxTxs, maxValue });
   const hash = await broadcast(acc, "hybrid", [msg]);
   console.log(`  window opened: ${blocks} blocks, ${maxTxs} txs (${hash})`);
   return true;
+}
+
+/** Send native QOR (uqor) from an account to a qor1 address (hybrid-signed Cosmos tx). */
+export async function sendQor(from: UnifiedAccount, to: string, uqor: bigint, memo?: string): Promise<string> {
+  if (!/^qor1[0-9a-z]+$/.test(to)) throw new Error(`recipient must be a qor1 address (got "${to}")`);
+  const msg = {
+    typeUrl: "/cosmos.bank.v1beta1.MsgSend",
+    value: { fromAddress: from.cosmos, toAddress: to, amount: [{ denom: "uqor", amount: uqor.toString() }] },
+  };
+  return broadcast(from, "hybrid", [msg], memo);
 }
 
 /** The chain's own record of a transaction: code and the hybrid check. */

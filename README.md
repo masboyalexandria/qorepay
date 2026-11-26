@@ -166,9 +166,17 @@ and what the human did.
 
 - [x] Repo public, MIT licence, README, featured image
 - [x] Contract + agent + dashboard built and tested locally (26 tests)
-- [ ] Deploy on QoreChain testnet + end-to-end run (needs faucet — 100 QOR)
+- [x] Deployed on QoreChain testnet + end-to-end run verified (see below)
 - [ ] Demo video ≤ 3 min (silent)
 - [ ] Submit before **2 Dec 2026 23:59 UTC** (3 Dec 07:59 WITA)
+
+## Live testnet record (27 Nov 2026, chain 9800)
+
+- Vault `0x2373754c771b6b7f22e9d60c0c9709ee4ed45352`, deployed + funded 10 QOR, tx `0x538739562cf627cefe182dbe7a2000545289fc7de61faa7499ba57030c540b25`, block 10803279.
+- 5 plans created (demo plan 0.8 QOR / 60 s × 3 + the 4 example bills from `plans.example.json`).
+- Plan 0 paid 3/3 on schedule by the agent (0.8 QOR each; txs `0x52535c63…`, `0xdf393ab3…`, `0x5e78048b…`) — the recurring loop works; session spent 2.4 QOR of its 3 QOR daily cap.
+- Attack simulation, all live: leaked classical key → `BadPqcSignature` (BLOCKED); stranger paying a plan → `NotAgent` (BLOCKED); legitimate ML-DSA-87 guardian withdrawal 0.01 QOR → signed + executed (3×, guardian nonce 0 → 3).
+- QoreX link proof (registration): 0.000001 QOR sent from the owner address to itself with memo `bbqd-link:4qDAiET5jqA5`, tx `284FCDED0295F786CAAB55F56FDF4BEEA64B4413BA51282FA27EE9E589CD527A`, code 0, hybrid verified.
 
 ## Credits
 
