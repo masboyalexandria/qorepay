@@ -167,14 +167,14 @@ and what the human did.
 - [x] Repo public, MIT licence, README, featured image
 - [x] Contract + agent + dashboard built and tested locally (26 tests)
 - [x] Deployed on QoreChain testnet + end-to-end run verified (see below)
-- [ ] Demo video ≤ 3 min (silent)
+- [x] Demo video ≤ 3 min (silent) — `qorepay-demo.mp4`, 1:58, silent; YouTube upload pending
 - [ ] Submit before **2 Dec 2026 23:59 UTC** (3 Dec 07:59 WITA)
 
 ## Live testnet record (27 Nov 2026, chain 9800)
 
 - Vault `0x2373754c771b6b7f22e9d60c0c9709ee4ed45352`, deployed + funded 10 QOR, tx `0x538739562cf627cefe182dbe7a2000545289fc7de61faa7499ba57030c540b25`, block 10803279.
 - 5 plans created (demo plan 0.8 QOR / 60 s × 3 + the 4 example bills from `plans.example.json`).
-- Plan 0 paid 3/3 on schedule by the agent (0.8 QOR each; txs `0x52535c63…`, `0xdf393ab3…`, `0x5e78048b…`) — the recurring loop works; session spent 2.4 QOR of its 3 QOR daily cap.
+- Plan 0 paid 3/3 on schedule by the agent (0.8 QOR each; txs `0x52535c6312960ab97fc9fe9195705238559cde4755c65517002c668f0ff405ff`, `0xdf393ab3bd843fad0b9cc734986e65ce3752fa624e46a227710d42ae433a34d3`, `0x5e78048b91713d65af221e57a85c74f46b8b4a528b5ace143bc4283e0fe3ade7`, blocks 10803393 / 10803524 / 10803605) — the recurring loop works; session spent 2.4 QOR of its 3 QOR daily cap.
 - Attack simulation, all live: leaked classical key → `BadPqcSignature` (BLOCKED); stranger paying a plan → `NotAgent` (BLOCKED); legitimate ML-DSA-87 guardian withdrawal 0.01 QOR → signed + executed (3×, guardian nonce 0 → 3).
 - QoreX link proof (registration): 0.000001 QOR sent from the owner address to itself with memo `bbqd-link:4qDAiET5jqA5`, tx `284FCDED0295F786CAAB55F56FDF4BEEA64B4413BA51282FA27EE9E589CD527A`, code 0, hybrid verified.
 
